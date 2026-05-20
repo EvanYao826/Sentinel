@@ -17,6 +17,7 @@ package com.alibaba.csp.sentinel.slots;
 
 import com.alibaba.csp.sentinel.slotchain.AbstractLinkedProcessorSlot;
 import com.alibaba.csp.sentinel.slotchain.ProcessorSlotChain;
+import com.alibaba.csp.sentinel.slotchain.ProcessorSlotContext;
 import com.alibaba.csp.sentinel.slots.block.authority.AuthoritySlot;
 import com.alibaba.csp.sentinel.slots.block.degrade.DefaultCircuitBreakerSlot;
 import com.alibaba.csp.sentinel.slots.block.degrade.DegradeSlot;
@@ -43,51 +44,58 @@ public class DefaultSlotChainBuilderTest {
         ProcessorSlotChain slotChain = builder.build();
         assertNotNull(slotChain);
 
-        // Verify the order of slot
+        // Each slot is wrapped in a ProcessorSlotContext
         AbstractLinkedProcessorSlot<?> next = slotChain.getNext();
-        assertTrue(next instanceof NodeSelectorSlot);
+        assertTrue(next instanceof ProcessorSlotContext);
+        assertTrue(((ProcessorSlotContext<?>) next).getDelegate() instanceof NodeSelectorSlot);
 
-        // Store the first NodeSelectorSlot instance
-        NodeSelectorSlot nodeSelectorSlot = (NodeSelectorSlot) next;
-
-        next = next.getNext();
-        assertTrue(next instanceof ClusterBuilderSlot);
+        ProcessorSlotContext<?> wrapper1 = (ProcessorSlotContext<?>) next;
 
         next = next.getNext();
-        assertTrue(next instanceof LogSlot);
+        assertTrue(next instanceof ProcessorSlotContext);
+        assertTrue(((ProcessorSlotContext<?>) next).getDelegate() instanceof ClusterBuilderSlot);
 
         next = next.getNext();
-        assertTrue(next instanceof StatisticSlot);
+        assertTrue(next instanceof ProcessorSlotContext);
+        assertTrue(((ProcessorSlotContext<?>) next).getDelegate() instanceof LogSlot);
 
         next = next.getNext();
-        assertTrue(next instanceof AuthoritySlot);
+        assertTrue(next instanceof ProcessorSlotContext);
+        assertTrue(((ProcessorSlotContext<?>) next).getDelegate() instanceof StatisticSlot);
 
         next = next.getNext();
-        assertTrue(next instanceof SystemSlot);
+        assertTrue(next instanceof ProcessorSlotContext);
+        assertTrue(((ProcessorSlotContext<?>) next).getDelegate() instanceof AuthoritySlot);
 
         next = next.getNext();
-        assertTrue(next instanceof FlowSlot);
+        assertTrue(next instanceof ProcessorSlotContext);
+        assertTrue(((ProcessorSlotContext<?>) next).getDelegate() instanceof SystemSlot);
 
         next = next.getNext();
-        assertTrue(next instanceof DefaultCircuitBreakerSlot);
+        assertTrue(next instanceof ProcessorSlotContext);
+        assertTrue(((ProcessorSlotContext<?>) next).getDelegate() instanceof FlowSlot);
 
         next = next.getNext();
-        assertTrue(next instanceof DegradeSlot);
+        assertTrue(next instanceof ProcessorSlotContext);
+        assertTrue(((ProcessorSlotContext<?>) next).getDelegate() instanceof DefaultCircuitBreakerSlot);
+
+        next = next.getNext();
+        assertTrue(next instanceof ProcessorSlotContext);
+        assertTrue(((ProcessorSlotContext<?>) next).getDelegate() instanceof DegradeSlot);
 
         next = next.getNext();
         assertNull(next);
 
-        // Build again to verify different instances
+        // Build again to verify different chain instances
         ProcessorSlotChain slotChain2 = builder.build();
         assertNotNull(slotChain2);
-        // Verify the two ProcessorSlotChain instances are different
         assertNotSame(slotChain, slotChain2);
 
-        next = slotChain2.getNext();
-        assertTrue(next instanceof NodeSelectorSlot);
-        // Store the second NodeSelectorSlot instance
-        NodeSelectorSlot nodeSelectorSlot2 = (NodeSelectorSlot) next;
-        // Verify the two NodeSelectorSlot instances are different
-        assertNotSame(nodeSelectorSlot, nodeSelectorSlot2);
+        // Verify wrapper instances are different (each chain has its own wrappers)
+        ProcessorSlotContext<?> wrapper2 = (ProcessorSlotContext<?>) slotChain2.getNext();
+        assertNotSame(wrapper1, wrapper2);
+
+        // But the underlying delegate slots are the same singleton instances
+        assertSame(wrapper1.getDelegate(), wrapper2.getDelegate());
     }
 }

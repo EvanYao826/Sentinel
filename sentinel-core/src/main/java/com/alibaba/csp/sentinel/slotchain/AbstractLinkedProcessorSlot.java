@@ -18,17 +18,46 @@ package com.alibaba.csp.sentinel.slotchain;
 import com.alibaba.csp.sentinel.context.Context;
 
 /**
+ * Base class for linked processor slots in a slot chain.
+ * <p>
+ * Each slot has a {@code next} pointer for chain traversal. When slots are
+ * singletons (loaded via SPI), multiple chains sharing the same slot instance
+ * will have conflicting {@code next} pointers.
+ * </p>
+ * <p>
+ * To support the {@link ProcessorSlotContext} wrapper pattern, this class
+ * provides a {@code CHAIN_NEXT_OVERRIDE} ThreadLocal that allows wrappers
+ * to redirect {@code fireEntry}/{@code fireExit} to the next wrapper in
+ * the chain, instead of using the delegate slot's own {@code next} pointer.
+ * This preserves singleton state while giving each chain independent traversal.
+ * </p>
+ *
  * @author qinan.qn
  * @author jialiang.linjl
  */
 public abstract class AbstractLinkedProcessorSlot<T> implements ProcessorSlot<T> {
+
+    /**
+     * ThreadLocal override for chain traversal. When set by a
+     * {@link ProcessorSlotContext}, {@code fireEntry}/{@code fireExit} will
+     * use this value instead of the instance {@code next} field.
+     * <p>
+     * This is consumed (removed) on use, so each {@code fireEntry}/{@code fireExit}
+     * call uses the override exactly once.
+     * </p>
+     */
+    static final ThreadLocal<AbstractLinkedProcessorSlot<?>> CHAIN_NEXT_OVERRIDE = new ThreadLocal<>();
 
     private AbstractLinkedProcessorSlot<?> next = null;
 
     @Override
     public void fireEntry(Context context, ResourceWrapper resourceWrapper, Object obj, int count, boolean prioritized, Object... args)
         throws Throwable {
-        if (next != null) {
+        AbstractLinkedProcessorSlot<?> chainNext = CHAIN_NEXT_OVERRIDE.get();
+        if (chainNext != null) {
+            CHAIN_NEXT_OVERRIDE.remove();
+            chainNext.transformEntry(context, resourceWrapper, obj, count, prioritized, args);
+        } else if (next != null) {
             next.transformEntry(context, resourceWrapper, obj, count, prioritized, args);
         }
     }
@@ -42,7 +71,11 @@ public abstract class AbstractLinkedProcessorSlot<T> implements ProcessorSlot<T>
 
     @Override
     public void fireExit(Context context, ResourceWrapper resourceWrapper, int count, Object... args) {
-        if (next != null) {
+        AbstractLinkedProcessorSlot<?> chainNext = CHAIN_NEXT_OVERRIDE.get();
+        if (chainNext != null) {
+            CHAIN_NEXT_OVERRIDE.remove();
+            chainNext.exit(context, resourceWrapper, count, args);
+        } else if (next != null) {
             next.exit(context, resourceWrapper, count, args);
         }
     }
