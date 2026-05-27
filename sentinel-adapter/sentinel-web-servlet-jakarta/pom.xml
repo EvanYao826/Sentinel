@@ -65,4 +65,16 @@
         </plugins>
     </build>
 
+    <profiles>
+        <profile>
+            <id>jdk-lt-17</id>
+            <activation>
+                <jdk>(,17)</jdk>
+            </activation>
+            <properties>
+                <skip.spring.v6x.test>true</skip.spring.v6x.test>
+            </properties>
+        </profile>
+    </profiles>
+
 </project>
